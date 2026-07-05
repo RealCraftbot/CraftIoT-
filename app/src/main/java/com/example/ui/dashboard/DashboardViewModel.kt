@@ -1,0 +1,413 @@
+package com.example.ui.dashboard
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
+import com.example.data.model.AutomationRule
+import com.example.data.model.FirmwareRelease
+import com.example.data.model.IoTDevice
+import com.example.data.model.SensorLog
+import com.example.data.repository.IoTRepository
+import com.example.network.GeminiApiClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class DashboardViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val db = AppDatabase.getDatabase(application)
+    private val repository = IoTRepository(
+        db.deviceDao(),
+        db.sensorDao(),
+        db.automationDao(),
+        db.firmwareDao()
+    )
+
+    // UI States
+    val devices: StateFlow<List<IoTDevice>> = repository.allDevices
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val rules: StateFlow<List<AutomationRule>> = repository.allRules
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val latestLogs: StateFlow<List<SensorLog>> = repository.latestSensorLogs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val firmwares: StateFlow<List<FirmwareRelease>> = repository.allFirmwares
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Selected state for detailed visualization
+    private val _selectedDeviceId = MutableStateFlow<String?>(null)
+    val selectedDeviceId: StateFlow<String?> = _selectedDeviceId.asStateFlow()
+
+    val selectedDevice: StateFlow<IoTDevice?> = combine(devices, selectedDeviceId) { list, id ->
+        list.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Selected metric for chart visualization
+    private val _selectedMetric = MutableStateFlow("speed")
+    val selectedMetric: StateFlow<String> = _selectedMetric.asStateFlow()
+
+    // Flow for current device's specific sensor logs (drives the canvas chart)
+    val selectedDeviceSensorLogs: Flow<List<SensorLog>> = combine(selectedDeviceId, selectedMetric) { id, metric ->
+        if (id != null) {
+            repository.getLogsForDevice(id, metric)
+        } else {
+            flowOf(emptyList())
+        }
+    }.flatMapLatest { it }
+
+    // Simulation Engine Job
+    private var simulationJob: Job? = null
+    private val _isSimulating = MutableStateFlow(true)
+    val isSimulating: StateFlow<Boolean> = _isSimulating.asStateFlow()
+
+    // Provisioning States
+    private val _provisioningStep = MutableStateFlow<ProvisioningStep>(ProvisioningStep.Idle)
+    val provisioningStep: StateFlow<ProvisioningStep> = _provisioningStep.asStateFlow()
+
+    // OTA Flashing States
+    private val _otaProgress = MutableStateFlow<Float?>(null) // null = not flashing, 0..1 = progress
+    val otaProgress: StateFlow<Float?> = _otaProgress.asStateFlow()
+
+    private val _otaTargetDeviceId = MutableStateFlow<String?>(null)
+    val otaTargetDeviceId: StateFlow<String?> = _otaTargetDeviceId.asStateFlow()
+
+    // AI Assistant States
+    private val _aiResponse = MutableStateFlow<String?>(null)
+    val aiResponse: StateFlow<String?> = _aiResponse.asStateFlow()
+
+    private val _aiLoading = MutableStateFlow(false)
+    val aiLoading: StateFlow<Boolean> = _aiLoading.asStateFlow()
+
+    private val _serialConsoleLogs = MutableStateFlow<List<String>>(
+        listOf(
+            "🚀 CraftIoT Gateway Core v2.4.0 started successfully.",
+            "📡 MQTT Client bound to broker.hivemq.com:1883",
+            "🔒 SSL/TLS handshake completed. Client cert verified.",
+            "📡 Scanning local BLE advertisement slots..."
+        )
+    )
+    val serialConsoleLogs: StateFlow<List<String>> = _serialConsoleLogs.asStateFlow()
+
+    init {
+        // Prepopulate data and start the local simulation loop
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.prepopulateDatabase()
+            startSimulationLoop()
+        }
+    }
+
+    fun selectDevice(id: String?) {
+        _selectedDeviceId.value = id
+        if (id != null) {
+            // Set sensible default metric based on device type
+            viewModelScope.launch {
+                val dev = devices.value.find { it.id == id }
+                _selectedMetric.value = when (dev?.type) {
+                    "ROBOT_CAR" -> "speed"
+                    "CLIMATE_NODE" -> "temp"
+                    "SECURITY_CAM" -> "battery"
+                    "SMART_AGRI" -> "humidity"
+                    else -> "signal"
+                }
+            }
+        }
+    }
+
+    fun selectMetric(metric: String) {
+        _selectedMetric.value = metric
+    }
+
+    fun addSerialLog(message: String) {
+        val current = _serialConsoleLogs.value.toMutableList()
+        current.add("[${System.currentTimeMillis() % 100000}] $message")
+        if (current.size > 100) current.removeAt(0)
+        _serialConsoleLogs.value = current
+    }
+
+    // Toggle simulation state
+    fun toggleSimulation() {
+        _isSimulating.value = !_isSimulating.value
+        if (_isSimulating.value) {
+            startSimulationLoop()
+            addSerialLog("🎮 Local ESP32 HW Simulator: RUNNING")
+        } else {
+            simulationJob?.cancel()
+            addSerialLog("⏸️ Local ESP32 HW Simulator: PAUSED")
+        }
+    }
+
+    private fun startSimulationLoop() {
+        simulationJob?.cancel()
+        simulationJob = viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(3000) // update telemetry every 3 seconds
+                val currentDevices = devices.value
+                for (device in currentDevices) {
+                    if (device.status != "ONLINE") continue
+
+                    var v1 = device.sensorValue1
+                    var v2 = device.sensorValue2
+
+                    when (device.type) {
+                        "ROBOT_CAR" -> {
+                            // Fluctuates speed and motor voltage
+                            val accel = (-10..10).random()
+                            v1 = (v1 + accel).coerceIn(0f, 120f)
+                            v2 = (11.8f + (Math.random() * 1.2f)).toFloat()
+
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "speed", value = v1))
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "battery", value = v2))
+                        }
+                        "CLIMATE_NODE" -> {
+                            // Fluctuates greenhouse temp and humidity
+                            val deltaT = ((-3..3).random() * 0.1f)
+                            val deltaH = ((-2..2).random() * 0.2f)
+                            v1 = (v1 + deltaT).coerceIn(15f, 45f)
+                            v2 = (v2 + deltaH).coerceIn(20f, 95f)
+
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "temp", value = v1))
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "humidity", value = v2))
+
+                            // If we cooled down, simulated valve might turn off automatically or via trigger
+                        }
+                        "SECURITY_CAM" -> {
+                            // Slow battery discharge
+                            v1 = (v1 - 0.1f).coerceIn(0f, 100f)
+                            if (v1 <= 15f) {
+                                addSerialLog("🚨 low battery alert on camera drone!")
+                            }
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "battery", value = v1))
+                        }
+                        "SMART_AGRI" -> {
+                            // Moisture slowly drops, pH stabilizes around 6.4
+                            v1 = (v1 + ((-1..1).random() * 0.05f)).coerceIn(5.5f, 7.5f)
+                            v2 = (v2 - 2f).coerceIn(100f, 800f) // drops unless pumped
+
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "ph", value = v1))
+                            repository.insertSensorLog(SensorLog(deviceId = device.id, metric = "humidity", value = v2))
+                        }
+                    }
+
+                    // Update in DB
+                    repository.insertOrUpdateDevice(
+                        device.copy(
+                            sensorValue1 = v1,
+                            sensorValue2 = v2,
+                            lastActive = System.currentTimeMillis()
+                        )
+                    )
+
+                    addSerialLog("📡 MQTT PUBLISH: topic='devices/${device.id}/telemetry' payload='{\"v1\":$v1, \"v2\":$v2}'")
+                }
+            }
+        }
+    }
+
+    // Toggle physical relay state on a device (e.g. Irrigation pump or Motor toggle)
+    fun toggleDeviceRelay(deviceId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            val newState = !dev.stateFlag1
+            repository.updateDeviceControlState(deviceId, newState)
+            addSerialLog("🔌 MQTT PUBLISH: topic='devices/$deviceId/control' payload='{\"relay\":$newState}'")
+
+            // If it's smart agri and pump turned on, simulate moisture recovery
+            if (dev.type == "SMART_AGRI" && newState) {
+                val updatedMoisture = (dev.sensorValue2 + 150f).coerceAtMost(700f)
+                repository.insertOrUpdateDevice(
+                    dev.copy(
+                        stateFlag1 = newState,
+                        sensorValue2 = updatedMoisture
+                    )
+                )
+                repository.insertSensorLog(SensorLog(deviceId = deviceId, metric = "humidity", value = updatedMoisture))
+                addSerialLog("💧 Hydroponics Pump ACTIVE: Soil Moisture recovered to ${updatedMoisture}cb")
+            }
+        }
+    }
+
+    // Wi-Fi / BLE Provisioning Flow
+    fun startProvisioning(deviceName: String, deviceType: String) {
+        viewModelScope.launch {
+            _provisioningStep.value = ProvisioningStep.BleScanning
+            addSerialLog("🔍 BLE SCAN: Looking for unprovisioned ESP32 advertising packets...")
+            delay(1500)
+
+            _provisioningStep.value = ProvisioningStep.BleConnected("00:1A:7D:DA:71:11")
+            addSerialLog("🔗 BLE CONNECT: Linked with ESP32-GATT Service (MAC 00:1A:7D:DA:71:11)")
+            delay(1500)
+
+            _provisioningStep.value = ProvisioningStep.WifiCredentialsInput(deviceName, deviceType)
+        }
+    }
+
+    fun submitProvisioningCredentials(ssid: String, deviceName: String, deviceType: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _provisioningStep.value = ProvisioningStep.ConfiguringWifi
+            addSerialLog("📡 BLE WRITE: Sending Wi-Fi SSID='$ssid' & security keys to ESP32 core...")
+            delay(2000)
+
+            _provisioningStep.value = ProvisioningStep.VerifyingCloudSync
+            addSerialLog("🌐 ESP32 STATUS: Local Wi-Fi connected. Fetching dynamic IP...")
+            delay(1500)
+
+            val newId = "ESP32_" + UUID.randomUUID().toString().take(6).uppercase()
+            val newDevice = IoTDevice(
+                id = newId,
+                name = deviceName,
+                type = deviceType,
+                status = "ONLINE",
+                ipAddress = "192.168.1." + (100..254).random(),
+                macAddress = "30:AE:A4:" + (10..99).random() + ":" + (10..99).random() + ":" + (10..99).random(),
+                connectionType = "WI_FI",
+                sensorValue1 = if (deviceType == "ROBOT_CAR") 0f else 24f,
+                sensorValue2 = if (deviceType == "ROBOT_CAR") 12f else 50f,
+                stateFlag1 = false
+            )
+            repository.insertOrUpdateDevice(newDevice)
+            addSerialLog("🎉 IoT DEPLOYMENT: Successfully registered $deviceName ($newId) to Cloud Node.")
+
+            _provisioningStep.value = ProvisioningStep.Success(newDevice)
+        }
+    }
+
+    fun resetProvisioning() {
+        _provisioningStep.value = ProvisioningStep.Idle
+    }
+
+    // OTA Flashing Action
+    fun startOtaUpdate(deviceId: String, firmwareId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            val fw = firmwares.value.find { it.id == firmwareId } ?: return@launch
+
+            _otaTargetDeviceId.value = deviceId
+            addSerialLog("📥 OTA UPDATE: Downloading Firmware v${fw.version} to application cache...")
+
+            // Phase 1: Local Cache Download
+            for (p in 1..5) {
+                delay(400)
+                _otaProgress.value = (p * 0.1f)
+            }
+
+            addSerialLog("🔄 OTA TRANSFER: Pushing firmware image over ${dev.connectionType}...")
+            // Phase 2: Transmit to Device
+            for (p in 6..10) {
+                delay(600)
+                _otaProgress.value = (p * 0.1f)
+            }
+
+            // Finish Update
+            _otaProgress.value = null
+            _otaTargetDeviceId.value = null
+
+            // Update Device info to show new version in description or mock config
+            repository.insertOrUpdateDevice(
+                dev.copy(
+                    customConfig = "FW Version: ${fw.version}",
+                    status = "ONLINE"
+                )
+            )
+            addSerialLog("⚡ OTA FLASH SUCCESS: $deviceId successfully rebooted into Firmware v${fw.version}")
+        }
+    }
+
+    // AI Query Engine
+    fun queryAiAssistant(userPrompt: String) {
+        if (userPrompt.isBlank()) return
+        _aiLoading.value = true
+        _aiResponse.value = null
+
+        viewModelScope.launch {
+            // Build real-time context from DB
+            val allDevs = devices.value
+            val activeRules = rules.value.filter { it.isActive }
+            val logs = latestLogs.value.take(5)
+
+            val telemetryContext = buildString {
+                appendLine("Current System Devices:")
+                allDevs.forEach { d ->
+                    appendLine("- ID: ${d.id}, Name: ${d.name}, Type: ${d.type}, Status: ${d.status}, Sensor1: ${d.sensorValue1}, Sensor2: ${d.sensorValue2}, ControlRelay: ${d.stateFlag1}")
+                }
+                appendLine("Active Automation Rules:")
+                activeRules.forEach { r ->
+                    appendLine("- Rule: ${r.name} monitors ${r.deviceId}.${r.metric} ${r.operator} ${r.thresholdValue} -> Actions ${r.actionDeviceId}.${r.actionType}")
+                }
+                appendLine("Latest System Logs:")
+                logs.forEach { l ->
+                    appendLine("- Device ${l.deviceId}: ${l.metric}=${l.value} at timestamp ${l.timestamp}")
+                }
+            }
+
+            val reply = GeminiApiClient.generateAssistantResponse(userPrompt, telemetryContext)
+            _aiResponse.value = reply
+            _aiLoading.value = false
+            addSerialLog("🤖 AI ASSISTANT: Handled query regarding '${userPrompt.take(20)}...'")
+        }
+    }
+
+    fun clearAiResponse() {
+        _aiResponse.value = null
+    }
+
+    // Add automation rule
+    fun createAutomationRule(rule: AutomationRule) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertRule(rule)
+            addSerialLog("⚙️ AUTOMATION REGISTERED: '${rule.name}' trigger bounds configured.")
+        }
+    }
+
+    fun deleteAutomationRule(rule: AutomationRule) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteRule(rule)
+            addSerialLog("⚙️ AUTOMATION DELETED: '${rule.name}' deleted.")
+        }
+    }
+
+    fun deleteDevice(device: IoTDevice) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteDevice(device)
+            addSerialLog("🗑️ Removed device ${device.id} (${device.name})")
+        }
+    }
+
+    fun updateDeviceTelemetry(deviceId: String, value1: Float, value2: Float) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            repository.insertOrUpdateDevice(
+                dev.copy(
+                    sensorValue1 = value1,
+                    sensorValue2 = value2,
+                    lastActive = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun addSensorLog(log: SensorLog) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertSensorLog(log)
+        }
+    }
+
+    fun clearSerialLogs() {
+        _serialConsoleLogs.value = emptyList()
+    }
+}
+
+sealed interface ProvisioningStep {
+    object Idle : ProvisioningStep
+    object BleScanning : ProvisioningStep
+    data class BleConnected(val mac: String) : ProvisioningStep
+    data class WifiCredentialsInput(val name: String, val type: String) : ProvisioningStep
+    object ConfiguringWifi : ProvisioningStep
+    object VerifyingCloudSync : ProvisioningStep
+    data class Success(val device: IoTDevice) : ProvisioningStep
+}

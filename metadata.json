@@ -1,0 +1,6 @@
+{
+  "name": "CraftIoT",
+  "description": "Production-ready Android IoT Control Center with custom device dashboards, real-time sensor streams, automation engines, and an AI-driven ESP32 assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
