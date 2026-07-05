@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -9,9 +10,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.ui.theme.CraftCobaltBlue
 import com.example.ui.theme.CraftLavender
 
@@ -59,8 +63,8 @@ fun CraftLogoIcon(
 }
 
 /**
- * Full Craft Innovations Logo with Logotype and NIGERIA LIMITED subtitle
- * adhering strictly to the "Clear Spacing" guidelines.
+ * Full Craft Innovations Logo utilizing the uploaded high-resolution
+ * official "Logo 2 (1).png" (logo_brand) branding asset.
  */
 @Composable
 fun CraftLogo(
@@ -69,36 +73,18 @@ fun CraftLogo(
     iconSize: Int = 40,
     showSubtitle: Boolean = true
 ) {
-    Row(
-        modifier = modifier.padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Box(
+        modifier = modifier
+            .padding(vertical = 4.dp)
+            .height(iconSize.dp)
     ) {
-        CraftLogoIcon(
-            modifier = Modifier.size(iconSize.dp),
-            primaryColor = MaterialTheme.colorScheme.primary,
-            secondaryColor = MaterialTheme.colorScheme.secondary
+        Image(
+            painter = painterResource(id = R.drawable.logo_brand),
+            contentDescription = "Craft Innovations Official Logo",
+            modifier = Modifier
+                .fillMaxHeight()
+                .aspectRatio(4.35f), // Maintain standard corporate landscape proportions
+            contentScale = ContentScale.Fit
         )
-        
-        Column(verticalArrangement = Arrangement.Center) {
-            Text(
-                text = "Craft Innovations",
-                fontStyle = MaterialTheme.typography.titleLarge.fontStyle,
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
-                color = textColor,
-                letterSpacing = (-0.5).sp
-            )
-            if (showSubtitle) {
-                Text(
-                    text = "NIGERIA LIMITED",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textColor.copy(alpha = 0.7f),
-                    letterSpacing = 4.5.sp, // Wide tracking as requested in branding guide
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-            }
-        }
     }
 }
