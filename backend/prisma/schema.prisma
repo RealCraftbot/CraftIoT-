@@ -1,0 +1,111 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  USER
+  TECHNICIAN
+}
+
+enum SharePermission {
+  READ
+  WRITE
+  ALL
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String?
+  fullName         String
+  role             Role              @default(USER)
+  googleId         String?           @unique
+  refreshTokenHash String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  devicesOwned     DeviceOwnership[]
+  devicesShared    DeviceShare[]
+}
+
+model IoTDevice {
+  id             String            @id
+  name           String
+  type           String // ROBOT_CAR, CLIMATE_NODE, SMART_AGRI, SECURITY_CAM
+  ipAddress      String?
+  macAddress     String            @unique
+  connectionType String            @default("WIFI")
+  sensorValue1   Float             @default(0.0)
+  sensorValue2   Float             @default(0.0)
+  stateFlag1     Boolean           @default(false)
+  lastActive     DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  owners         DeviceOwnership[]
+  shares         DeviceShare[]
+  sensorLogs     SensorLog[]
+  ruleTriggers   AutomationRule[]  @relation("TriggerDevice")
+  ruleActions    AutomationRule[]  @relation("ActionDevice")
+}
+
+model DeviceOwnership {
+  id       String    @id @default(uuid())
+  deviceId String
+  userId   String
+  device   IoTDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, userId])
+}
+
+model DeviceShare {
+  id         String          @id @default(uuid())
+  deviceId   String
+  userId     String
+  permission SharePermission @default(READ)
+  device     IoTDevice       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, userId])
+}
+
+model SensorLog {
+  id        String    @id @default(uuid())
+  deviceId  String
+  metric    String
+  value     Float
+  timestamp DateTime  @default(now())
+  device    IoTDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model AutomationRule {
+  id             String    @id @default(uuid())
+  name           String
+  deviceId       String
+  metric         String
+  operator       String // GREATER_THAN, LESS_THAN, EQUALS
+  thresholdValue Float
+  actionDeviceId String
+  actionType     String // TURN_ON, TURN_OFF, ALERT
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  device         IoTDevice @relation("TriggerDevice", fields: [deviceId], references: [id], onDelete: Cascade)
+  actionDevice   IoTDevice @relation("ActionDevice", fields: [actionDeviceId], references: [id], onDelete: Cascade)
+}
+
+model FirmwareRelease {
+  id           String   @id @default(uuid())
+  version      String
+  deviceType   String // e.g., ROBOT_CAR
+  fileSizeMb   Float
+  fileUrl      String
+  releaseNotes String
+  checksum     String
+  createdAt    DateTime @default(now())
+}

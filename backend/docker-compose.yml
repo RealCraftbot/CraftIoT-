@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/craftiot?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_ACCESS_SECRET=craftiot_access_jwt_super_secret_key_2026
+      - JWT_REFRESH_SECRET=craftiot_refresh_jwt_super_secret_key_2026
+      - MQTT_BROKER_URL=mqtt://emqx:1883
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - emqx
+
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: craftiot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  emqx:
+    image: emqx/emqx:5.3.0
+    restart: always
+    ports:
+      - "1883:1883"      # MQTT Port
+      - "8083:8083"      # MQTT WebSocket Port
+      - "18083:18083"    # EMQX Admin Dashboard
+    volumes:
+      - emqxdata:/opt/emqx/data
+
+volumes:
+  pgdata:
+  redisdata:
+  emqxdata:
