@@ -30,16 +30,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     // UI States
     val devices: StateFlow<List<IoTDevice>> = repository.allDevices
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val rules: StateFlow<List<AutomationRule>> = repository.allRules
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val latestLogs: StateFlow<List<SensorLog>> = repository.latestSensorLogs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val firmwares: StateFlow<List<FirmwareRelease>> = repository.allFirmwares
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Selected state for detailed visualization
     private val _selectedDeviceId = MutableStateFlow<String?>(null)
@@ -70,6 +70,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     // Provisioning States
     private val _provisioningStep = MutableStateFlow<ProvisioningStep>(ProvisioningStep.Idle)
     val provisioningStep: StateFlow<ProvisioningStep> = _provisioningStep.asStateFlow()
+
+    private val _qrCodeTargetGroup = MutableStateFlow("Unassigned")
+    val qrCodeTargetGroup: StateFlow<String> = _qrCodeTargetGroup.asStateFlow()
+
+    private val _discoveredUnprovisionedDevices = MutableStateFlow<List<IoTDevice>>(emptyList())
+    val discoveredUnprovisionedDevices: StateFlow<List<IoTDevice>> = _discoveredUnprovisionedDevices.asStateFlow()
+
+    private val _isDiscovering = MutableStateFlow(false)
+    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
     // OTA Flashing States
     private val _otaProgress = MutableStateFlow<Float?>(null) // null = not flashing, 0..1 = progress
@@ -283,12 +292,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 connectionType = "WI_FI",
                 sensorValue1 = if (deviceType == "ROBOT_CAR") 0f else 24f,
                 sensorValue2 = if (deviceType == "ROBOT_CAR") 12f else 50f,
-                stateFlag1 = false
+                stateFlag1 = false,
+                deviceGroup = _qrCodeTargetGroup.value
             )
             repository.insertOrUpdateDevice(newDevice)
-            addSerialLog("🎉 IoT DEPLOYMENT: Successfully registered $deviceName ($newId) to Cloud Node.")
+            addSerialLog("🎉 IoT DEPLOYMENT: Successfully registered $deviceName ($newId) to Cloud Node in Group '${_qrCodeTargetGroup.value}'.")
 
             _provisioningStep.value = ProvisioningStep.Success(newDevice)
+            _qrCodeTargetGroup.value = "Unassigned"
         }
     }
 
@@ -425,6 +436,128 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun addSensorLog(log: SensorLog) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.insertSensorLog(log)
+        }
+    }
+
+    // --- Device Management Actions ---
+
+    fun pairDeviceViaQrCode(qrContent: String) {
+        viewModelScope.launch {
+            _provisioningStep.value = ProvisioningStep.BleScanning
+            addSerialLog("📷 QR PAIR: Parsing QR payload: $qrContent")
+            delay(1200)
+
+            try {
+                // Expected format: id:ESP32_QR_XX,name:My QR Device,type:ROBOT_CAR,group:Living Room
+                val pairs = qrContent.split(",")
+                var id = "ESP32_" + UUID.randomUUID().toString().take(6).uppercase()
+                var name = "QR Paired ESP32"
+                var type = "ROBOT_CAR"
+                var group = "Unassigned"
+
+                for (pair in pairs) {
+                    val kv = pair.split(":")
+                    if (kv.size == 2) {
+                        val key = kv[0].trim()
+                        val value = kv[1].trim()
+                        when (key.lowercase()) {
+                            "id" -> id = value
+                            "name" -> name = value
+                            "type" -> type = value
+                            "group" -> group = value
+                        }
+                    }
+                }
+
+                _provisioningStep.value = ProvisioningStep.BleConnected("QR-AUTOPAIR")
+                addSerialLog("📷 QR PAIR SUCCESS: Extracted specs -> Name: $name, Type: $type, Group: $group")
+                _qrCodeTargetGroup.value = group
+                delay(1000)
+
+                _provisioningStep.value = ProvisioningStep.WifiCredentialsInput(name, type)
+            } catch (e: Exception) {
+                addSerialLog("❌ QR PAIR ERROR: Invalid QR payload configuration format.")
+                _provisioningStep.value = ProvisioningStep.Idle
+            }
+        }
+    }
+
+    fun discoverDevices() {
+        if (_isDiscovering.value) return
+        _isDiscovering.value = true
+        addSerialLog("🔍 NETWORK DISCOVERY: Scanning local wireless subnet...")
+        viewModelScope.launch {
+            delay(2000) // Simulating network discovery delay
+            val discoveredList = listOf(
+                IoTDevice(
+                    id = "ESP32_DISC_8F",
+                    name = "ESP32 Temperature Station",
+                    type = "CLIMATE_NODE",
+                    status = "OFFLINE",
+                    ipAddress = "192.168.1.189",
+                    macAddress = "30:AE:A4:8F:CC:12",
+                    connectionType = "WI_FI",
+                    deviceGroup = "Kitchen"
+                ),
+                IoTDevice(
+                    id = "ESP32_DISC_C4",
+                    name = "ESP32 Agri Valve",
+                    type = "SMART_AGRI",
+                    status = "OFFLINE",
+                    ipAddress = "192.168.1.190",
+                    macAddress = "30:AE:A4:C4:DD:54",
+                    connectionType = "MQTT",
+                    deviceGroup = "Yard"
+                )
+            )
+            _discoveredUnprovisionedDevices.value = discoveredList
+            _isDiscovering.value = false
+            addSerialLog("🔍 DISCOVERY: Found 2 unprovisioned ESP32 nodes on local subnet.")
+        }
+    }
+
+    fun provisionDiscoveredDevice(device: IoTDevice, group: String) {
+        viewModelScope.launch {
+            addSerialLog("⚙️ PROVISION DISCOVERED: Pairing ${device.name} (${device.id}) to group '$group'...")
+            val provisioned = device.copy(
+                status = "ONLINE",
+                deviceGroup = group,
+                lastActive = System.currentTimeMillis()
+            )
+            repository.insertOrUpdateDevice(provisioned)
+            // Remove from discovered list
+            _discoveredUnprovisionedDevices.value = _discoveredUnprovisionedDevices.value.filter { it.id != device.id }
+            addSerialLog("🎉 SUCCESS: ${device.name} fully integrated and active!")
+        }
+    }
+
+    fun renameDevice(deviceId: String, newName: String) {
+        viewModelScope.launch {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            repository.insertOrUpdateDevice(dev.copy(name = newName))
+            addSerialLog("✏️ RENAMED: Device $deviceId updated to '$newName'")
+        }
+    }
+
+    fun updateDeviceGroup(deviceId: String, groupName: String) {
+        viewModelScope.launch {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            repository.insertOrUpdateDevice(dev.copy(deviceGroup = groupName))
+            addSerialLog("📁 GROUP UPDATE: Device $deviceId moved to group '$groupName'")
+        }
+    }
+
+    fun toggleDeviceOnlineStatus(deviceId: String) {
+        viewModelScope.launch {
+            val dev = devices.value.find { it.id == deviceId } ?: return@launch
+            val newStatus = if (dev.status == "OFFLINE") "ONLINE" else "OFFLINE"
+            repository.insertOrUpdateDevice(
+                dev.copy(
+                    status = newStatus,
+                    lastActive = if (newStatus == "ONLINE") System.currentTimeMillis() else dev.lastActive
+                )
+            )
+            addSerialLog("📡 STATUS UPDATE: Device $deviceId is now $newStatus")
         }
     }
 

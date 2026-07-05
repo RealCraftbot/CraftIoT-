@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,10 @@ import com.example.data.model.SensorLog
 import com.example.ui.components.TelemetryChart
 import com.example.ui.components.CraftLogo
 import com.example.ui.dashboard.DashboardViewModel
+import com.example.ui.auth.AuthViewModel
+import com.example.ui.auth.AuthState
+import com.example.ui.auth.AuthDialog
+import com.example.ui.auth.UserProfileDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -36,6 +41,7 @@ import java.util.*
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
+    authViewModel: AuthViewModel,
     modifier: Modifier = Modifier
 ) {
     val devices by viewModel.devices.collectAsState()
@@ -47,6 +53,7 @@ fun DashboardScreen(
     val isSimulating by viewModel.isSimulating.collectAsState()
 
     val onlineCount = devices.count { it.status == "ONLINE" }
+    val authState by authViewModel.authState.collectAsState()
 
     var showLoginDialog by remember { mutableStateOf(false) }
 
@@ -66,15 +73,40 @@ fun DashboardScreen(
                 showSubtitle = true
             )
 
-            IconButton(
-                onClick = { showLoginDialog = true }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Enterprise Profile Identity",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
+            val isAuthenticated = authState is AuthState.Authenticated
+            if (isAuthenticated) {
+                val user = (authState as AuthState.Authenticated).user
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(com.example.ui.theme.CraftCobaltBlue, com.example.ui.theme.CraftLavender)
+                            )
+                        )
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
+                        .clickable { showLoginDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.fullName.take(2).uppercase(),
+                        color = com.example.ui.theme.CraftPureWhite,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = { showLoginDialog = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "Enterprise Profile Identity",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
             }
         }
 
@@ -544,69 +576,21 @@ fun DashboardScreen(
     }
     } // Closes outer Column wrapper
 
-    // Interactive Corporate Login overlay matching Logo 2 (1).png with Clear Spacing rules
+    // Interactive Corporate Login/Profile overlay using AuthComponents
     if (showLoginDialog) {
-        AlertDialog(
-            onDismissRequest = { showLoginDialog = false },
-            confirmButton = {
-                Button(
-                    onClick = { showLoginDialog = false },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Secure Login", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLoginDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            title = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CraftLogo(
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                        iconSize = 40,
-                        showSubtitle = true
-                    )
-                }
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Text(
-                        text = "Access secure enterprise IoT credentials & sync local SQLite database to the cloud.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
-                        label = { Text("Corporate Identity email") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
-                        label = { Text("Security Access pin") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            shape = RoundedCornerShape(24.dp),
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        val currentAuthState = authState
+        if (currentAuthState is AuthState.Authenticated) {
+            UserProfileDialog(
+                authViewModel = authViewModel,
+                user = currentAuthState.user,
+                onDismiss = { showLoginDialog = false }
+            )
+        } else {
+            AuthDialog(
+                authViewModel = authViewModel,
+                onDismiss = { showLoginDialog = false }
+            )
+        }
     }
 }
 

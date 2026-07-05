@@ -16,7 +16,8 @@ data class IoTDevice(
     val sensorValue1: Float = 0.0f, // Temperature, Speed, or Battery
     val sensorValue2: Float = 0.0f, // Humidity, Distance, or Signal
     val stateFlag1: Boolean = false, // Motor, Relay, or Light Switch
-    val customConfig: String = "" // Additional JSON or metadata
+    val customConfig: String = "", // Additional JSON or metadata
+    val deviceGroup: String = "Unassigned"
 ) {
     val typeLabel: String
         get() = when (type) {
@@ -26,4 +27,7 @@ data class IoTDevice(
             "SMART_AGRI" -> "Soil Hydroponics System"
             else -> "IoT Edge Device"
         }
+
+    val isOffline: Boolean
+        get() = status == "OFFLINE" || (System.currentTimeMillis() - lastActive) > 25000L // 25s threshold
 }

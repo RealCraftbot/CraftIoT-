@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.dashboard.DashboardViewModel
+import com.example.ui.auth.AuthViewModel
 import com.example.ui.screens.AIAssistantScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.DeviceCatalogScreen
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CraftIoTTheme {
                 val viewModel: DashboardViewModel = viewModel()
+                val authViewModel: AuthViewModel = viewModel()
                 var currentTab by remember { mutableStateOf(Tab.Dashboard) }
 
                 Scaffold(
@@ -115,7 +117,7 @@ class MainActivity : ComponentActivity() {
                             .windowInsetsPadding(WindowInsets.safeDrawing)
                     ) {
                         when (currentTab) {
-                            Tab.Dashboard -> DashboardScreen(viewModel = viewModel)
+                            Tab.Dashboard -> DashboardScreen(viewModel = viewModel, authViewModel = authViewModel)
                             Tab.Devices -> DeviceCatalogScreen(viewModel = viewModel)
                             Tab.Simulator -> ESP32SimulatorScreen(viewModel = viewModel)
                             Tab.Assistant -> AIAssistantScreen(viewModel = viewModel)
