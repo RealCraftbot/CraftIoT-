@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.IoTDevice
 import com.example.data.model.SensorLog
 import com.example.ui.components.TelemetryChart
+import com.example.ui.components.CraftLogo
 import com.example.ui.dashboard.DashboardViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -47,13 +48,46 @@ fun DashboardScreen(
 
     val onlineCount = devices.count { it.status == "ONLINE" }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("dashboard_screen_root"),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    var showLoginDialog by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        // High-Fidelity Corporate AppBar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            CraftLogo(
+                textColor = MaterialTheme.colorScheme.onBackground,
+                iconSize = 36,
+                showSubtitle = true
+            )
+
+            IconButton(
+                onClick = { showLoginDialog = true }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Enterprise Profile Identity",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .testTag("dashboard_screen_root"),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         // Core Banner Header
         item {
             Card(
@@ -76,42 +110,45 @@ fun DashboardScreen(
                         )
                         .padding(24.dp)
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SettingsInputAntenna,
-                                contentDescription = "Ecosystem Banner",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
+                                contentDescription = "Ecosystem Banner Active",
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(24.dp)
                             )
                             Text(
-                                text = "CRAFTIOT PLATFORM",
-                                fontSize = 13.sp,
+                                text = "CRAFTIOT SYSTEM INSTANCE",
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color.White.copy(alpha = 0.85f)
+                                color = Color.White.copy(alpha = 0.9f),
+                                letterSpacing = 1.5.sp
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Smart Grid Active",
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
 
-                        Text(
-                            text = "Smart Grid Active",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "Robust offline-first SQLite synchronization engine actively running with direct REST & secure local hardware simulation loops.",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
+                            Text(
+                                text = "Robust offline-first SQLite synchronization engine actively running with direct REST & secure local hardware simulation loops.",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.85f),
+                                lineHeight = 18.sp
+                            )
+                        }
                     }
                 }
             }
@@ -504,6 +541,72 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+    } // Closes outer Column wrapper
+
+    // Interactive Corporate Login overlay matching Logo 2 (1).png with Clear Spacing rules
+    if (showLoginDialog) {
+        AlertDialog(
+            onDismissRequest = { showLoginDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = { showLoginDialog = false },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Secure Login", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLoginDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CraftLogo(
+                        textColor = MaterialTheme.colorScheme.onSurface,
+                        iconSize = 40,
+                        showSubtitle = true
+                    )
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Text(
+                        text = "Access secure enterprise IoT credentials & sync local SQLite database to the cloud.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        label = { Text("Corporate Identity email") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        label = { Text("Security Access pin") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 

@@ -55,15 +55,19 @@ fun DeviceCatalogScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
                         Text(
                             text = "IoT Ecosystem Catalog",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "Manage unlimited physical & simulated nodes.",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                     }
@@ -78,12 +82,23 @@ fun DeviceCatalogScreen(
                             viewModel.resetProvisioning()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        modifier = Modifier.testTag("add_device_btn")
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .testTag("add_device_btn")
+                            .align(Alignment.CenterVertically)
                     ) {
-                        Icon(Icons.Default.Add, "Add Device", modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Deploy Node",
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Deploy Node", fontSize = 12.sp)
+                        Text(
+                            text = "Deploy Node",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

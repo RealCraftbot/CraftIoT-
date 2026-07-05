@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Top-Right Interlocking Polygon (Primary Cobalt Blue #0143DF) -->
+    <path
+        android:fillColor="#0143DF"
+        android:pathData="M24,18 L96,18 L96,48 L66,48 L48,66 L24,42 Z" />
+
+    <!-- Bottom-Left Interlocking Polygon (Secondary Accent Lavender #C6CCFF) -->
+    <path
+        android:fillColor="#C6CCFF"
+        android:pathData="M24,42 L48,66 L30,84 L54,108 L96,108 L66,78 L96,78 L96,48 L66,48 Z" />
+
+</vector>

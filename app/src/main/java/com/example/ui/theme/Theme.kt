@@ -11,29 +11,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = EmeraldTeal,
-    secondary = ElectricCyan,
-    tertiary = SunsetAmber,
-    background = SpaceObsidian,
-    surface = NebulaSlate,
-    onPrimary = SnowWhite,
-    onSecondary = SpaceObsidian,
-    onBackground = SoftAqua,
-    onSurface = SoftAqua,
-    error = DangerRed
+    primary = CraftCobaltBlue,
+    secondary = CraftLavender,
+    tertiary = CraftNeonMint,
+    background = CraftDarkNavy,
+    surface = CraftSurfaceDark,
+    onPrimary = CraftPureWhite,
+    onSecondary = CraftDarkNavy,
+    onBackground = CraftPureWhite,
+    onSurface = CraftPureWhite,
+    error = CraftDangerRed
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = LightTeal,
-    secondary = LightCyan,
-    tertiary = LightAmber,
-    background = SoftAqua,
-    surface = SnowWhite,
-    onPrimary = SnowWhite,
-    onSecondary = SnowWhite,
-    onBackground = NebulaSlate,
-    onSurface = NebulaSlate,
-    error = DangerRed
+    primary = CraftCobaltBlue,
+    secondary = CraftLavender,
+    tertiary = CraftBrightLime,
+    background = CraftSurfaceLight,
+    surface = CraftPureWhite,
+    onPrimary = CraftPureWhite,
+    onSecondary = CraftDarkNavy,
+    onBackground = CraftDarkNavy,
+    onSurface = CraftDarkNavy,
+    error = CraftDangerRed
 )
 
 @Composable
